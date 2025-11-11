@@ -10,12 +10,6 @@ import com.qualcomm.robotcore.util.Range;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 
-/**
- * TELEOP_FINAL
- * -------------
- * Gamepad 1: Mecanum Drive (Field-Centric)
- * Gamepad 2: Launcher + Intake Control
- */
 @TeleOp(name = "TELEOP_Final", group = "Drive")
 public class TELEOP_Final extends OpMode {
 
@@ -25,8 +19,8 @@ public class TELEOP_Final extends OpMode {
     // --- Launcher Motors ---
     private DcMotor LLaunch, RLaunch;
 
-    // --- Intake Motor ---
-    private DcMotor intakeMotor;
+    // --- Intake + Kickstand Motors ---
+    private DcMotor intakeMotor, kickstandMotor;
 
     // --- IMU ---
     private IMU imu;
@@ -39,14 +33,10 @@ public class TELEOP_Final extends OpMode {
     private static final double DEADBAND = 0.05;
     private static final double ROT_SCALE = 0.8;
 
-    // --- Launcher Control ---
-    private static final double LAUNCH_POWER = 0.8;  // Adjust as needed
-    private boolean launchOn = false;
-    private boolean aPrev = false;
-
-    // --- Intake Control ---
-    private boolean intakeOn = false;
-    private boolean rbPrev = false;
+    // --- Power Constants ---
+    private static final double LAUNCH_POWER = 0.8;
+    private static final double INTAKE_POWER = 1.0;
+    private static final double KICKSTAND_POWER = 0.8;
 
     @Override
     public void init() {
@@ -69,7 +59,6 @@ public class TELEOP_Final extends OpMode {
         // --- Launcher Motors ---
         LLaunch = hardwareMap.get(DcMotor.class, "LLaunch");
         RLaunch = hardwareMap.get(DcMotor.class, "RLaunch");
-
         RLaunch.setDirection(DcMotorSimple.Direction.REVERSE);
 
         for (DcMotor m : new DcMotor[]{LLaunch, RLaunch}) {
@@ -77,13 +66,19 @@ public class TELEOP_Final extends OpMode {
             m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         }
 
-        // --- Intake Motor ---
+        // --- Intake + Kickstand ---
         intakeMotor = hardwareMap.get(DcMotor.class, "intake_motor");
-        intakeMotor.setDirection(DcMotorSimple.Direction.FORWARD);
-        intakeMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        intakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        kickstandMotor = hardwareMap.get(DcMotor.class, "kickstand_motor");
 
-        // --- IMU ---
+        intakeMotor.setDirection(DcMotorSimple.Direction.FORWARD);
+        kickstandMotor.setDirection(DcMotorSimple.Direction.FORWARD);
+
+        for (DcMotor m : new DcMotor[]{intakeMotor, kickstandMotor}) {
+            m.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        }
+
+        // --- IMU Setup ---
         imu = hardwareMap.get(IMU.class, "imu");
         RevHubOrientationOnRobot.LogoFacingDirection logo = RevHubOrientationOnRobot.LogoFacingDirection.UP;
         RevHubOrientationOnRobot.UsbFacingDirection usb = RevHubOrientationOnRobot.UsbFacingDirection.FORWARD;
@@ -91,16 +86,16 @@ public class TELEOP_Final extends OpMode {
         imu.initialize(imuParams);
 
         telemetry.addLine("✅ TELEOP_FINAL Initialized");
-        telemetry.addLine("Gamepad1 = Drive | Gamepad2 = Launcher + Intake");
+        telemetry.addLine("Gamepad1 = Drive | Gamepad2 = Launcher + Intake + Kickstand");
         telemetry.update();
     }
 
     @Override
     public void loop() {
         // --- Gamepad1: Drive Controls ---
-        double lx = gamepad1.left_stick_x;    // strafe
-        double ly = -gamepad1.left_stick_y;   // forward/back
-        double rx = gamepad1.right_stick_x * ROT_SCALE; // rotation
+        double lx = gamepad1.left_stick_x;
+        double ly = -gamepad1.left_stick_y;
+        double rx = gamepad1.right_stick_x * ROT_SCALE;
 
         // Deadband
         lx = (Math.abs(lx) < DEADBAND) ? 0 : lx;
@@ -117,7 +112,7 @@ public class TELEOP_Final extends OpMode {
         if (yNow && !yPrev) imu.resetYaw();
         yPrev = yNow;
 
-        // --- Field Centric transform ---
+        // --- Field Centric Transform ---
         double x = lx;
         double y = ly;
         if (fieldCentric) {
@@ -131,7 +126,7 @@ public class TELEOP_Final extends OpMode {
             y = rotY;
         }
 
-        // --- Mecanum drive mix ---
+        // --- Mecanum Drive Mix ---
         double fl = y + x + rx;
         double fr = y - x - rx;
         double bl = y - x + rx;
@@ -140,10 +135,7 @@ public class TELEOP_Final extends OpMode {
         // Normalize
         double max = Math.max(1.0, Math.max(Math.abs(fl),
                 Math.max(Math.abs(fr), Math.max(Math.abs(bl), Math.abs(br)))));
-        fl /= max;
-        fr /= max;
-        bl /= max;
-        br /= max;
+        fl /= max; fr /= max; bl /= max; br /= max;
 
         // Apply power
         FLmotor.setPower(fl);
@@ -151,32 +143,31 @@ public class TELEOP_Final extends OpMode {
         BLmotor.setPower(bl);
         BRmotor.setPower(br);
 
-        // --- Gamepad2: Launcher ---
-        boolean aNow = gamepad2.a;
-        if (aNow && !aPrev) {
-            launchOn = !launchOn; // toggle
-        }
-        aPrev = aNow;
-
-        if (launchOn) {
+        // --- Gamepad2: Launcher (Right Trigger) ---
+        if (gamepad2.right_trigger > 0.1) {
             LLaunch.setPower(LAUNCH_POWER);
             RLaunch.setPower(LAUNCH_POWER);
+        } else if (gamepad2.left_trigger > 0.1) {
+            LLaunch.setPower(-LAUNCH_POWER); // reverse if you want opposite spin
+            RLaunch.setPower(-LAUNCH_POWER);
         } else {
             LLaunch.setPower(0);
             RLaunch.setPower(0);
         }
 
-        // --- Gamepad2: Intake ---
-        boolean rbNow = gamepad2.right_bumper;
-        if (rbNow && !rbPrev) {
-            intakeOn = !intakeOn;
-        }
-        rbPrev = rbNow;
 
-        if (intakeOn) {
-            intakeMotor.setPower(1.0); // Full power intake
+        // --- Gamepad2: Intake (Right Bumper) ---
+        if (gamepad2.right_bumper) {
+            intakeMotor.setPower(INTAKE_POWER);
         } else {
-            intakeMotor.setPower(0.0);
+            intakeMotor.setPower(0);
+        }
+
+        // --- Gamepad2: Kickstand (Left Bumper) ---
+        if (gamepad2.left_bumper) {
+            kickstandMotor.setPower(KICKSTAND_POWER);
+        } else {
+            kickstandMotor.setPower(0);
         }
 
         // --- Telemetry ---
@@ -185,12 +176,17 @@ public class TELEOP_Final extends OpMode {
         telemetry.addData("Heading (deg)", imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES));
 
         telemetry.addLine("\nLauncher:");
-        telemetry.addData("Launcher Active", launchOn);
-        telemetry.addData("LLaunch Pos", LLaunch.getCurrentPosition());
-        telemetry.addData("RLaunch Pos", RLaunch.getCurrentPosition());
+        telemetry.addData("Right Trigger", gamepad2.right_trigger);
+        telemetry.addData("LLaunch Power", LLaunch.getPower());
+        telemetry.addData("RLaunch Power", RLaunch.getPower());
 
         telemetry.addLine("\nIntake:");
-        telemetry.addData("Intake Active", intakeOn);
+        telemetry.addData("Right Bumper", gamepad2.right_bumper);
+        telemetry.addData("Intake Power", intakeMotor.getPower());
+
+        telemetry.addLine("\nKickstand:");
+        telemetry.addData("Left Bumper", gamepad2.left_bumper);
+        telemetry.addData("Kickstand Power", kickstandMotor.getPower());
 
         telemetry.update();
     }
