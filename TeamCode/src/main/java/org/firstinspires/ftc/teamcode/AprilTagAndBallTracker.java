@@ -1,57 +1,65 @@
 package org.firstinspires.ftc.teamcode;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+
+import com.bylazar.camerastream.PanelsCameraStream;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+
+import org.firstinspires.ftc.robotcore.external.function.Consumer;
+import org.firstinspires.ftc.robotcore.external.function.Continuation;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
+import org.firstinspires.ftc.robotcore.external.stream.CameraStreamSource;
 import org.firstinspires.ftc.robotcore.internal.camera.calibration.CameraCalibration;
+
 import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.VisionProcessor;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
+import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
-import org.opencv.core.MatOfPoint;
-import org.opencv.core.MatOfPoint2f;
-import org.opencv.core.Point;
 import org.opencv.core.Scalar;
-import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
-import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
-import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
-
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * AprilTag + Ball Tracker (Overlap-Aware Version)
- * Handles multiple and overlapping balls using distance transform segmentation.
- */
-@Autonomous(name = "AprilTag + Ball Tracker (Overlap-Aware)", group = "Vision")
+@Autonomous(name="AprilTag + Ball Tracker (Panels Stream)", group="Vision")
 public class AprilTagAndBallTracker extends LinearOpMode {
 
     private VisionPortal visionPortal;
     private AprilTagProcessor aprilTag;
-    private ColorBallProcessor colorProcessor;
+    private StreamProcessor streamProcessor;
 
     @Override
     public void runOpMode() {
+
+        // AprilTag processor
         aprilTag = new AprilTagProcessor.Builder()
                 .setDrawAxes(true)
                 .setDrawTagOutline(true)
                 .setTagFamily(AprilTagProcessor.TagFamily.TAG_36h11)
                 .build();
 
-        colorProcessor = new ColorBallProcessor();
+        // Combined processor with bitmap stream
+        streamProcessor = new StreamProcessor();
 
+        // Build VisionPortal
         visionPortal = new VisionPortal.Builder()
                 .setCamera(hardwareMap.get(WebcamName.class, "Webcam 1"))
                 .addProcessor(aprilTag)
-                .addProcessor(colorProcessor)
+                .addProcessor(streamProcessor)
                 .enableLiveView(true)
                 .setStreamFormat(VisionPortal.StreamFormat.MJPEG)
                 .build();
 
-        telemetry.addLine("✅ Vision initialized — press ▶ to start");
+        // ⭐ Start Panels stream (CORRECT API)
+        PanelsCameraStream.startStream(streamProcessor, 15); // 15 FPS is typical
+
+        telemetry.addLine("Ready. Panels streaming enabled.");
         telemetry.update();
 
         waitForStart();
@@ -61,28 +69,37 @@ public class AprilTagAndBallTracker extends LinearOpMode {
             int id = detections.isEmpty() ? -1 : detections.get(0).id;
 
             telemetry.addData("AprilTag ID", id);
-            telemetry.addData("Detected Color", colorProcessor.getDetectedColorName());
+            telemetry.addData("Ball Color", streamProcessor.getDetectedColorName());
             telemetry.update();
-
-            sleep(50);
         }
 
+        // ⭐ Stop stream (CORRECT API)
+        PanelsCameraStream.stopStream();
         visionPortal.close();
     }
 
-    /**
-     * Processor for purple/green ball detection with overlap handling.
-     */
-    static class ColorBallProcessor implements VisionProcessor {
+    // -------------------------------------------------------------------------
+    // STREAM PROCESSOR
+    // -------------------------------------------------------------------------
+
+    class StreamProcessor implements VisionProcessor, CameraStreamSource {
+
+        private final AtomicReference<Bitmap> lastFrame =
+                new AtomicReference<>(Bitmap.createBitmap(1,1, Bitmap.Config.RGB_565));
+
         private int detectedColor = 0;
         private double purpleCount = 0;
         private double greenCount = 0;
 
         @Override
-        public void init(int width, int height, CameraCalibration calibration) {}
+        public void init(int width, int height, CameraCalibration calibration) {
+            lastFrame.set(Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565));
+        }
 
         @Override
-        public Object processFrame(Mat frame, long captureTimeNanos) {
+        public Object processFrame(Mat frame, long timestampNs) {
+
+            // --- HSV COLOR DETECTION ---
             Mat hsv = new Mat();
             Imgproc.cvtColor(frame, hsv, Imgproc.COLOR_RGB2HSV);
 
@@ -93,98 +110,44 @@ public class AprilTagAndBallTracker extends LinearOpMode {
 
             Mat purpleMask = new Mat();
             Mat greenMask = new Mat();
+
             Core.inRange(hsv, lowerPurple, upperPurple, purpleMask);
             Core.inRange(hsv, lowerGreen, upperGreen, greenMask);
-
-            Mat kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(3, 3));
-            Imgproc.morphologyEx(purpleMask, purpleMask, Imgproc.MORPH_CLOSE, kernel);
-            Imgproc.morphologyEx(greenMask, greenMask, Imgproc.MORPH_CLOSE, kernel);
 
             purpleCount = Core.countNonZero(purpleMask);
             greenCount = Core.countNonZero(greenMask);
 
-            // Separate overlapping balls for each color
-            segmentAndDetect(frame, purpleMask, new Scalar(255, 0, 255), "PURPLE");
-            segmentAndDetect(frame, greenMask, new Scalar(0, 255, 0), "GREEN");
-
-            if (purpleCount > 2000 && purpleCount > greenCount) detectedColor = 1;
-            else if (greenCount > 2000 && greenCount > purpleCount) detectedColor = 2;
-            else detectedColor = 0;
-
-            Imgproc.putText(frame, "PurpleCount: " + (int)purpleCount, new Point(20,40),
-                    Imgproc.FONT_HERSHEY_SIMPLEX, 0.7, new Scalar(255,0,255), 2);
-            Imgproc.putText(frame, "GreenCount: " + (int)greenCount, new Point(20,70),
-                    Imgproc.FONT_HERSHEY_SIMPLEX, 0.7, new Scalar(0,255,0), 2);
+            if (purpleCount > 2000 && purpleCount > greenCount)
+                detectedColor = 1;
+            else if (greenCount > 2000 && greenCount > purpleCount)
+                detectedColor = 2;
+            else
+                detectedColor = 0;
 
             hsv.release();
             purpleMask.release();
             greenMask.release();
-            kernel.release();
-            return frame;
-        }
 
-        /**
-         * Enhanced detection: uses distance transform to separate overlapping blobs.
-         */
-        private void segmentAndDetect(Mat frame, Mat mask, Scalar drawColor, String label) {
-            // --- Distance transform for splitting ---
-            Mat dist = new Mat();
-            Imgproc.distanceTransform(mask, dist, Imgproc.DIST_L2, 3);
-            Core.normalize(dist, dist, 0, 255, Core.NORM_MINMAX);
+            // Convert frame to Bitmap
+            Bitmap bmp = Bitmap.createBitmap(frame.width(), frame.height(), Bitmap.Config.RGB_565);
+            Utils.matToBitmap(frame, bmp);
+            lastFrame.set(bmp);
 
-            // Threshold to get distinct peaks
-            Mat distThresh = new Mat();
-            Imgproc.threshold(dist, distThresh, 60, 255, Imgproc.THRESH_BINARY);
-
-            // Convert to 8-bit
-            distThresh.convertTo(distThresh, 0);
-
-            // Find contours (each peak roughly one ball)
-            List<MatOfPoint> contours = new ArrayList<>();
-            Mat hierarchy = new Mat();
-            Imgproc.findContours(distThresh, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
-
-            for (MatOfPoint contour : contours) {
-                double area = Imgproc.contourArea(contour);
-                if (area < 200) continue;
-
-                MatOfPoint2f contour2f = new MatOfPoint2f(contour.toArray());
-                Point center = new Point();
-                float[] radius = new float[1];
-                Imgproc.minEnclosingCircle(contour2f, center, radius);
-
-                if (radius[0] > 5 && radius[0] < 200) {
-                    Imgproc.circle(frame, center, (int) radius[0], drawColor, 3);
-                    Imgproc.putText(frame, label,
-                            new Point(center.x - 30, center.y - radius[0] - 10),
-                            Imgproc.FONT_HERSHEY_SIMPLEX, 0.6, drawColor, 2);
-                }
-
-                contour2f.release();
-            }
-
-            hierarchy.release();
-            dist.release();
-            distThresh.release();
-            for (MatOfPoint c : contours) c.release();
+            return null;
         }
 
         @Override
-        public void onDrawFrame(android.graphics.Canvas canvas,
-                                int onscreenWidth,
-                                int onscreenHeight,
-                                float scaleBmpPxToCanvasPx,
-                                float scaleCanvasDensity,
-                                Object userContext) {}
+        public void onDrawFrame(Canvas canvas, int w, int h, float x, float y, Object ctx) {}
 
-        public int getDetectedColor() {
-            return detectedColor;
+        @Override
+        public void getFrameBitmap(Continuation<? extends Consumer<Bitmap>> continuation) {
+            continuation.dispatch(c -> c.accept(lastFrame.get()));
         }
 
         public String getDetectedColorName() {
             if (detectedColor == 1) return "Purple";
-            else if (detectedColor == 2) return "Green";
-            else return "None";
+            if (detectedColor == 2) return "Green";
+            return "None";
         }
     }
 }
