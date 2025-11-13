@@ -57,7 +57,7 @@ public class AprilTagAndBallTracker extends LinearOpMode {
                 .build();
 
         // ⭐ Start Panels stream (CORRECT API)
-        PanelsCameraStream.startStream(streamProcessor, 15); // 15 FPS is typical
+        PanelsCameraStream.INSTANCE.startStream(streamProcessor, 15);
 
         telemetry.addLine("Ready. Panels streaming enabled.");
         telemetry.update();
@@ -74,7 +74,7 @@ public class AprilTagAndBallTracker extends LinearOpMode {
         }
 
         // ⭐ Stop stream (CORRECT API)
-        PanelsCameraStream.stopStream();
+        PanelsCameraStream.INSTANCE.stopStream();
         visionPortal.close();
     }
 
