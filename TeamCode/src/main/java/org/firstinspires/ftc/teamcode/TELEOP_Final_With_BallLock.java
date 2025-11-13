@@ -169,7 +169,7 @@ public class TELEOP_Final_With_BallLock extends OpMode {
             RLaunch.setPower(0);
         }
 
-        intakeMotor.setPower(gamepad2.right_bumper ? 1.0 : 0);
+        intakeMotor.setPower((gamepad2.right_bumper ? 1.0 : 0)*2);
         kickstandMotor.setPower(gamepad2.left_bumper ? 0.8 : 0);
 
         telemetry.addData("AutoTurn (A)", autoTurn);
@@ -265,7 +265,7 @@ public class TELEOP_Final_With_BallLock extends OpMode {
 
             normalized = Math.max(-1, Math.min(1, normalized));
 
-            double kP = 0.45;
+            double kP = 0.80;
             double power = normalized * kP;
 
             if (Math.abs(power) < 0.05) power = 0;
