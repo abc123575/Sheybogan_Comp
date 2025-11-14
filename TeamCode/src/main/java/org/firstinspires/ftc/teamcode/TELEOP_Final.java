@@ -159,7 +159,7 @@ public class TELEOP_Final extends OpMode {
         // --- Gamepad2: Intake (Right Bumper) ---
         intakeMotor.setDirection(DcMotorSimple.Direction.REVERSE);
         if (gamepad2.right_bumper) {
-            intakeMotor.setPower(INTAKE_POWER);
+            intakeMotor.setPower((INTAKE_POWER) * 2) ;
         } else {
             intakeMotor.setPower(0);
         }
