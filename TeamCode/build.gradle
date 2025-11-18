@@ -22,7 +22,14 @@ android {
         jniLibs.useLegacyPackaging true
     }
 }
+repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }   // <-- add this
+}
+
 
 dependencies {
     implementation project(':FtcRobotController')
+    implementation 'com.github.Eeshwar-Krishnan:PedroPathing:2.0.4'
 }
