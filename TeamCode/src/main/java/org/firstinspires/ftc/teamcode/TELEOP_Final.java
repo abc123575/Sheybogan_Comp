@@ -6,7 +6,6 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
-import com.qualcomm.robotcore.util.Range;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 
@@ -34,7 +33,7 @@ public class TELEOP_Final extends OpMode {
     private static final double ROT_SCALE = 0.8;
 
     // --- Power Constants ---
-    private static final double LAUNCH_POWER = 1 ;
+    private static final double LAUNCH_POWER = 1.0 ;
     private static final double INTAKE_POWER = 1.0;
     private static final double KICKSTAND_POWER = 0.8;
 
@@ -159,7 +158,7 @@ public class TELEOP_Final extends OpMode {
         // --- Gamepad2: Intake (Right Bumper) ---
         intakeMotor.setDirection(DcMotorSimple.Direction.REVERSE);
         if (gamepad2.right_bumper) {
-            intakeMotor.setPower((INTAKE_POWER) * 2) ;
+            intakeMotor.setPower((-INTAKE_POWER) * 2) ;
         } else {
             intakeMotor.setPower(0);
         }

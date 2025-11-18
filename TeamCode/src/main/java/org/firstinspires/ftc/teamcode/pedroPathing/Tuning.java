@@ -132,11 +132,11 @@ class LocalizationTest extends OpMode {
     }
 
     /** This initializes the PoseUpdater, the mecanum drive motors, and the Panels telemetry. */
-    @Override
-    public void init_loop() {
-        telemetryM.debug("This will print your robot's position to telemetry while "
-                + "allowing robot control through a basic mecanum drive on gamepad 1.");
-        telemetryM.update(telemetry);
+    @Overrideot control through a basic mecanum drive on gamepad 1.");
+            telemetryM.update(telemetry);
+    public void init_loop(
+        telemetryM.debug(") {This will print your robot's position to telemetry while "
+                + "allowing rob
         follower.update();
         drawOnlyCurrent();
     }
