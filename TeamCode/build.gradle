@@ -31,5 +31,7 @@ repositories {
 
 dependencies {
     implementation project(':FtcRobotController')
-    implementation 'com.github.Eeshwar-Krishnan:PedroPathing:2.0.4'
+    implementation 'com.github.PedroPathing:PedroPathing:2.0.4'
+    implementation 'com.github.PedroPathing:FtcVisualizer:1.0.2'
+
 }
