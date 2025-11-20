@@ -158,10 +158,13 @@ public class TELEOP_Final extends OpMode {
         // --- Gamepad2: Intake (Right Bumper) ---
         intakeMotor.setDirection(DcMotorSimple.Direction.REVERSE);
         if (gamepad2.right_bumper) {
-            intakeMotor.setPower((INTAKE_POWER) * -1) ;
+            intakeMotor.setPower((INTAKE_POWER) * -1);
+        } else if (gamepad2.left_bumper) {
+            intakeMotor.setPower(-INTAKE_POWER); // reverse if you want opposite spin
         } else {
             intakeMotor.setPower(0);
         }
+
 
         // --- Gamepad2: Kickstand (Left Bumper) ---
         if (gamepad2.left_bumper) {
